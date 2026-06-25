@@ -2,49 +2,39 @@
 
 Single-script Windows 11 Pro deployment toolkit for Microsoft 365 Business Premium / Intune / Autopilot environments.
 
+The script sets the PowerShell execution policy automatically on every run, so you will not hit unsigned script errors when installing from PSGallery.
+
 ---
 
-## Usage
+## Commands
 
-Run from an **elevated PowerShell prompt**. The script always sets the execution policy automatically before doing anything else, so you will not hit unsigned script errors with PSGallery.
+Run from an **elevated PowerShell prompt**. Copy the command for the task you need.
 
-**Base command — substitute the flag you need at the end:**
+**Collect hardware hash** — insert a USB first, the script auto-detects it:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) <flag>
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -CollectHash
 ```
 
-Running with no flag prints a help screen with all available options and examples.
-
----
-
-## Flags
-
-| Flag | What it does |
-|---|---|
-| `-CollectHash` | Collect Autopilot hardware hash — auto-saves to USB or Public Desktop |
-| `-PrepUSB` | Inject `ei.cfg` into a Windows 11 USB to force Pro edition |
-| `-PrepUSB -CollectHash` | Do both in one run |
-| `-DriveLetter E` | Force a specific drive letter with `-PrepUSB` |
-| `-OutputPath C:\path\file.csv` | Override the hash CSV save location |
-
----
-
-## Examples
+**Prep a Windows 11 USB for Pro install** — auto-detects the USB:
 
 ```powershell
-# Collect hardware hash (insert USB first — script auto-detects it)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -CollectHash
-
-# Prep a Windows 11 USB for Pro install (auto-detects the USB)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB
+```
 
-# Prep USB on drive E: explicitly
+**Prep USB on a specific drive letter:**
+
+```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -DriveLetter E
+```
 
-# Prep USB and collect hash in one shot
+**Both at once:**
+
+```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -CollectHash
 ```
+
+**No flags** — prints a help screen with all options and the above commands ready to copy.
 
 ---
 
@@ -52,9 +42,7 @@ Running with no flag prints a help screen with all available options and example
 
 ### 1. Collect hardware hashes
 
-Insert a USB drive into the target device and run `-CollectHash`. The script saves `autopilot-<hostname>.csv` into an `AutopilotHashes\` folder on the USB. Multiple devices can share the same USB — each device writes its own file named after its hostname.
-
-If no USB is present, the file is saved to the Public Desktop instead.
+Insert a USB drive into the target device and run `-CollectHash`. The script saves `autopilot-<hostname>.csv` into an `AutopilotHashes\` folder on the USB. Multiple devices can share the same USB — each writes its own file named after its hostname. If no USB is found, the file is saved to the Public Desktop instead.
 
 **Import into Intune once you have the CSVs:**
 
@@ -90,7 +78,5 @@ Write the Windows 11 ISO to a USB using the [Microsoft Media Creation Tool](http
 
 ## Notes
 
-- The script sets `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force` automatically on every run, preventing PSGallery install failures on machines with a restrictive default policy.
-- The `& ([scriptblock]::Create((irm ...)))` pattern runs the script in-memory — the file-based execution policy check does not apply, but the policy still needs to be set for `Install-Script` to work.
 - The hash CSV contains serial number, Windows product ID, and hardware hash only — no personal data.
 - If a device was previously registered in Autopilot under a different tenant, it must be deregistered there first.
