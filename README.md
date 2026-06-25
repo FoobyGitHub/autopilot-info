@@ -2,11 +2,11 @@
 
 Windows 11 Pro deployment toolkit for Microsoft 365 Business Premium environments. Single PowerShell script, runs from an elevated prompt — nothing to install.
 
-It does three things:
+**`-PrepUSB`** — takes a Windows 11 USB created with Rufus and prepares it for deployment: forces Pro edition via `ei.cfg`, detects the CPU, and injects the appropriate Intel drivers into `boot.wim` and `install.wim`. Run once per USB on any machine with internet access.
 
-- Prepares a Windows 11 install USB or ISO — forces Pro edition and injects Intel drivers where the hardware needs them
-- Collects the device hardware hash and saves it locally
-- Uploads the hash directly to Intune via Microsoft Graph — no CSV, no manual import
+**`-PatchISO`** — does the same to a Windows 11 ISO file and outputs a patched `.iso` ready to burn with Rufus. Patch once, burn as many times as needed.
+
+**`-CollectHash`** — collects the device hardware hash and uploads it to Intune via Microsoft Graph. Run on the target device before or after the OS install.
 
 ---
 
