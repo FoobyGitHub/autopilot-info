@@ -76,14 +76,18 @@ Reads the CPU model using `Win32_Processor` and classifies it:
 
 ### 3. Injects the Intel VMD driver (if required)
 
-If the CPU requires VMD, the script:
+If the CPU requires VMD, the script downloads the bundled driver files from this repo (`drivers/VMD/`) and injects them into **both** WIM files on the USB using inbox `dism.exe` — no ADK required:
 
-1. Downloads the bundled VMD driver files directly from this repo (`drivers/VMD/`) — no dependency on Intel's website, no version lookups, no zip extraction
-2. Uses **inbox `dism.exe`** (`C:\Windows\System32\dism.exe`) — no Windows ADK required — to inject the VMD driver into `boot.wim` index 2 on the USB
+| Target | Why |
+|---|---|
+| `boot.wim` index 2 | The Windows Setup environment — disk must be visible at the *"Where do you want to install Windows?"* screen |
+| `install.wim` all indexes | The installed OS image — without the driver, Windows BSODs with `INACCESSIBLE_BOOT_DEVICE` on first boot |
 
-Index 2 is the Windows Setup environment that runs during the *"Where do you want to install Windows?"* screen. With the driver pre-injected, the NVMe/VMD storage controller is visible to setup automatically. **The engineer never needs to click "Load Driver".**
+The script enumerates the index count in `install.wim` automatically and loops through every edition present (Home, Pro, etc.) so no index is missed.
 
-If DISM injection fails for any reason, `-PrepUSB` reports **Failed** in the summary and stops. There is no silent fallback — the error message explains exactly what went wrong.
+For each WIM file: if injection fails, DISM discards the mount and `-PrepUSB` reports **Failed** — no silent fallback.
+
+> **MCT ESD-USB:** If the USB was created with the Microsoft Media Creation Tool, `install.wim` may be packaged as `install.esd` instead. DISM cannot modify ESD files. The script will detect this and instruct the engineer to recreate the USB using [Rufus](https://rufus.ie) with the ISO in WIM mode.
 
 ---
 

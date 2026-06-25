@@ -241,12 +241,90 @@ function Invoke-VMDDriverInjection {
             & "$env:SystemRoot\System32\dism.exe" /Unmount-Wim /MountDir:"$mountDir" /Discard 2>&1 | Out-Null
         }
         Remove-Item -Path $mountDir -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item -Path $tempDir  -Recurse -Force -ErrorAction SilentlyContinue
+        # $tempDir (driver files) kept alive — needed for install.wim injection below
     }
 
-    if (-not $dismOk) { return $false }
+    if (-not $dismOk) {
+        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        return $false
+    }
 
     Write-Host "[PrepUSB] VMD driver injected into boot.wim — disk will be detected automatically during Windows setup." -ForegroundColor Green
+
+    # ── DISM injection into install.wim ───────────────────────────────────────
+    # boot.wim covers setup/disk detection. install.wim carries the actual OS —
+    # injecting here ensures the installed Windows boots correctly on VMD machines.
+
+    $installWim = "${UsbRoot}sources\install.wim"
+    $installEsd = "${UsbRoot}sources\install.esd"
+
+    if (-not (Test-Path $installWim)) {
+        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $installEsd) {
+            Write-Host "[PrepUSB] WARNING: USB was created with MCT in ESD format — DISM cannot modify install.esd. Recreate the USB using Rufus with the ISO in WIM mode, then re-run -PrepUSB." -ForegroundColor Yellow
+        } else {
+            Write-Host "[PrepUSB] WARNING: install.wim not found — skipping install.wim injection." -ForegroundColor Yellow
+        }
+        return $false
+    }
+
+    Write-Host "[PrepUSB] Enumerating install.wim indexes..." -ForegroundColor Cyan
+    $wimInfoOut = & "$env:SystemRoot\System32\dism.exe" /Get-WimInfo /WimFile:"$installWim" 2>&1
+    $indexCount = ($wimInfoOut | Select-String -Pattern '^\s*Index\s*:\s*\d+').Count
+
+    if ($indexCount -eq 0) {
+        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "[PrepUSB] ERROR: Could not determine index count from install.wim." -ForegroundColor Red
+        return $false
+    }
+
+    Write-Host "[PrepUSB] Found $indexCount index(es) in install.wim — injecting VMD driver into each..." -ForegroundColor Cyan
+
+    & "$env:SystemRoot\System32\attrib.exe" -R "$installWim" 2>&1 | Out-Null
+    Write-Host "[PrepUSB] Read-only attribute cleared on install.wim." -ForegroundColor DarkGray
+
+    $installOk = $true
+
+    for ($idx = 1; $idx -le $indexCount; $idx++) {
+        $installMountDir = Join-Path $env:TEMP "InstallWimMount_$(Get-Random)"
+        New-Item -ItemType Directory -Path $installMountDir -Force | Out-Null
+        $idxOk = $false
+
+        Write-Host "[PrepUSB] Processing install.wim index $idx of $indexCount..." -ForegroundColor Cyan
+
+        try {
+            $out = & "$env:SystemRoot\System32\dism.exe" /Mount-Wim /WimFile:"$installWim" /Index:$idx /MountDir:"$installMountDir" 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Mount failed (exit $LASTEXITCODE): $($out -join ' ')" }
+
+            $out = & "$env:SystemRoot\System32\dism.exe" /Image:"$installMountDir" /Add-Driver /Driver:"$driverInfDir" /Recurse 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Add-Driver failed (exit $LASTEXITCODE): $($out -join ' ')" }
+
+            $out = & "$env:SystemRoot\System32\dism.exe" /Unmount-Wim /MountDir:"$installMountDir" /Commit 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Unmount/commit failed (exit $LASTEXITCODE): $($out -join ' ')" }
+
+            $idxOk = $true
+
+        } catch {
+            Write-Host "[PrepUSB] ERROR: DISM injection into install.wim index $idx failed — $_" -ForegroundColor Red
+            $installOk = $false
+        } finally {
+            if (-not $idxOk) {
+                & "$env:SystemRoot\System32\dism.exe" /Unmount-Wim /MountDir:"$installMountDir" /Discard 2>&1 | Out-Null
+            }
+            Remove-Item -Path $installMountDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        if (-not $idxOk) { break }
+    }
+
+    Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    if (-not $installOk) {
+        Write-Host "[PrepUSB] ERROR: VMD injection into install.wim failed — see above." -ForegroundColor Red
+        return $false
+    }
+
+    Write-Host "[PrepUSB] VMD driver injected into install.wim ($indexCount indexes) — installed OS will boot correctly." -ForegroundColor Green
     return $true
 }
 
