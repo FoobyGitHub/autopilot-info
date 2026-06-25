@@ -44,7 +44,7 @@ if (-not $PrepUSB -and -not $CollectHash) {
     Write-Host ""
     Write-Host "Copy and run one of these commands:" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  Collect hash (insert USB first, auto-detects):" -ForegroundColor DarkGray
+    Write-Host "  Collect hash (insert a separate USB first, auto-detects it):" -ForegroundColor DarkGray
     Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -CollectHash" -ForegroundColor White
     Write-Host ""
     Write-Host "  Prep a Windows 11 USB for Pro install:" -ForegroundColor DarkGray
@@ -61,16 +61,27 @@ if (-not $PrepUSB -and -not $CollectHash) {
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
-function Find-AnyUSB {
-    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -ne ($env:SystemDrive + "\") }
+function Test-IsWindows11USB {
+    param([string]$Root)
+    return (Test-Path "${Root}sources\install.wim") -or (Test-Path "${Root}sources\install.esd")
+}
+
+function Find-DataUSB {
+    # Returns the first non-system drive that is NOT a Windows 11 install USB.
+    # This prevents hash CSVs from being written to install media.
+    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object {
+        $_.Root -ne ($env:SystemDrive + "\") -and
+        -not (Test-IsWindows11USB -Root $_.Root)
+    }
     if ($drives) { return @($drives)[0].Root }
     return $null
 }
 
 function Find-Windows11USB {
+    # Returns the first drive that contains Windows 11 setup files.
     $drives = Get-PSDrive -PSProvider FileSystem | Where-Object {
         $_.Root -ne ($env:SystemDrive + "\") -and
-        ((Test-Path "$($_.Root)sources\install.wim") -or (Test-Path "$($_.Root)sources\install.esd"))
+        (Test-IsWindows11USB -Root $_.Root)
     }
     if ($drives) { return @($drives)[0] }
     return $null
@@ -86,7 +97,7 @@ function Invoke-PrepUSB {
     if ($Drive) {
         $Drive = $Drive.TrimEnd(':').ToUpper()
         $root = "${Drive}:\"
-        if (-not (Test-Path "${root}sources\install.wim") -and -not (Test-Path "${root}sources\install.esd")) {
+        if (-not (Test-IsWindows11USB -Root $root)) {
             Write-Host "[PrepUSB] ERROR: Drive ${Drive}: does not contain Windows 11 setup files." -ForegroundColor Red
             return $false
         }
@@ -129,7 +140,7 @@ function Invoke-CollectHash {
         $outPath = $OverridePath
         Write-Host "[CollectHash] Output path overridden: $outPath" -ForegroundColor Yellow
     } else {
-        $usbRoot = Find-AnyUSB
+        $usbRoot = Find-DataUSB
         if ($usbRoot) {
             $hashFolder = "${usbRoot}AutopilotHashes"
             New-Item -ItemType Directory -Force -Path $hashFolder | Out-Null
@@ -137,7 +148,8 @@ function Invoke-CollectHash {
             Write-Host "[CollectHash] USB detected at ${usbRoot} — saving to: $outPath" -ForegroundColor Green
         } else {
             $outPath = "C:\Users\Public\Desktop\autopilot-$(hostname).csv"
-            Write-Host "[CollectHash] No USB detected — saving to Public Desktop: $outPath" -ForegroundColor Yellow
+            Write-Host "[CollectHash] No separate USB detected — saving to Public Desktop: $outPath" -ForegroundColor Yellow
+            Write-Host "[CollectHash] (Windows 11 install USB does not count — insert a separate data USB to save there)" -ForegroundColor DarkGray
         }
     }
 
