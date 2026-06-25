@@ -1,15 +1,14 @@
 # Invoke-AutopilotSetup.ps1
-# Single-script Autopilot deployment tool for Microsoft 365 Business Premium environments.
+# Autopilot deployment tool for Microsoft 365 Business Premium environments.
 #
-# Run from an elevated PowerShell prompt using:
+# DEFAULT (no flags) — collect hardware hash, auto-saves to USB:
+#   irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1 | iex
 #
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) <flags>
+# PREP USB (forces Windows 11 Pro edition):
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB
 #
-# Flags:
-#   -CollectHash          Collect hardware hash and save to USB (or desktop if no USB found)
-#   -PrepUSB              Inject ei.cfg into Windows 11 USB to force Pro edition
-#   -DriveLetter <X>      Force a specific drive letter for -PrepUSB (optional)
-#   -OutputPath <path>    Override the output path for the hash CSV (optional)
+# BOTH at once:
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -CollectHash
 
 param(
     [switch]$PrepUSB,
@@ -18,39 +17,26 @@ param(
     [string]$OutputPath
 )
 
+# Default behaviour: collect hash
+if (-not $PrepUSB -and -not $CollectHash) {
+    $CollectHash = $true
+}
+
 Write-Host ""
 Write-Host "  Autopilot Setup Tool" -ForegroundColor Cyan
 Write-Host "  Microsoft 365 Business Premium" -ForegroundColor Cyan
 Write-Host "  ─────────────────────────────────" -ForegroundColor DarkGray
 Write-Host ""
 
-if (-not $PrepUSB -and -not $CollectHash) {
-    Write-Host "No action specified. Use one or more flags:" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "  -CollectHash     Collect Autopilot hardware hash -> saves to USB AutopilotHashes folder" -ForegroundColor White
-    Write-Host "  -PrepUSB         Inject ei.cfg into Windows 11 USB to force Pro edition" -ForegroundColor White
-    Write-Host "  -DriveLetter E   Force USB drive letter for -PrepUSB" -ForegroundColor White
-    Write-Host "  -OutputPath      Override hash CSV output path" -ForegroundColor White
-    Write-Host ""
-    Write-Host "Example (run from elevated PowerShell):" -ForegroundColor Cyan
-    Write-Host "  & ([scriptblock]::Create((irm <url>))) -CollectHash" -ForegroundColor DarkGray
-    Write-Host "  & ([scriptblock]::Create((irm <url>))) -PrepUSB -DriveLetter E" -ForegroundColor DarkGray
-    Write-Host "  & ([scriptblock]::Create((irm <url>))) -PrepUSB -CollectHash" -ForegroundColor DarkGray
-    Write-Host ""
-    exit 0
-}
-
-# ── Shared: find a removable/external USB drive ────────────────────────────────
+# ── Shared helpers ─────────────────────────────────────────────────────────────
 
 function Find-AnyUSB {
-    # Returns the root of the first non-system drive found
     $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -ne ($env:SystemDrive + "\") }
     if ($drives) { return @($drives)[0].Root }
     return $null
 }
 
 function Find-Windows11USB {
-    # Returns the root of the first drive containing Windows 11 setup files
     $drives = Get-PSDrive -PSProvider FileSystem | Where-Object {
         $_.Root -ne ($env:SystemDrive + "\") -and
         ((Test-Path "$($_.Root)sources\install.wim") -or (Test-Path "$($_.Root)sources\install.esd"))
@@ -94,11 +80,11 @@ function Invoke-PrepUSB {
 
     try {
         Set-Content -Path $eiCfgPath -Value $eiCfg -Encoding ASCII -Force
-        Write-Host "[PrepUSB] Done — USB will now install Windows 11 Pro automatically. No edition prompt will appear." -ForegroundColor Green
+        Write-Host "[PrepUSB] Done — USB will now install Windows 11 Pro automatically." -ForegroundColor Green
         return $true
     } catch {
         Write-Host "[PrepUSB] ERROR: Could not write ei.cfg: $_" -ForegroundColor Red
-        Write-Host "[PrepUSB] Make sure the USB is not write-protected and you are running as Administrator." -ForegroundColor Yellow
+        Write-Host "[PrepUSB] Ensure the USB is not write-protected and you are running as Administrator." -ForegroundColor Yellow
         return $false
     }
 }
@@ -108,17 +94,16 @@ function Invoke-PrepUSB {
 function Invoke-CollectHash {
     param([string]$OverridePath)
 
-    # Determine output path
     if ($OverridePath) {
         $outPath = $OverridePath
-        Write-Host "[CollectHash] Output path overridden to: $outPath" -ForegroundColor Yellow
+        Write-Host "[CollectHash] Output path overridden: $outPath" -ForegroundColor Yellow
     } else {
         $usbRoot = Find-AnyUSB
         if ($usbRoot) {
             $hashFolder = "${usbRoot}AutopilotHashes"
             New-Item -ItemType Directory -Force -Path $hashFolder | Out-Null
             $outPath = "$hashFolder\autopilot-$(hostname).csv"
-            Write-Host "[CollectHash] USB detected at ${usbRoot} — hash will be saved to: $outPath" -ForegroundColor Green
+            Write-Host "[CollectHash] USB detected at ${usbRoot} — saving to: $outPath" -ForegroundColor Green
         } else {
             $outPath = "C:\Users\Public\Desktop\autopilot-$(hostname).csv"
             Write-Host "[CollectHash] No USB detected — saving to Public Desktop: $outPath" -ForegroundColor Yellow
@@ -159,12 +144,12 @@ function Invoke-CollectHash {
 $usbOk  = $true
 $hashOk = $true
 
-if ($PrepUSB)    { $usbOk  = Invoke-PrepUSB -Drive $DriveLetter;    Write-Host "" }
+if ($PrepUSB)    { $usbOk  = Invoke-PrepUSB -Drive $DriveLetter;         Write-Host "" }
 if ($CollectHash){ $hashOk = Invoke-CollectHash -OverridePath $OutputPath; Write-Host "" }
 
 Write-Host "  ─────────────────────────────────" -ForegroundColor DarkGray
-if ($PrepUSB)    { Write-Host "  PrepUSB     $(if ($usbOk)  { '✓ Complete' } else { '✗ Failed' })" -ForegroundColor $(if ($usbOk)  { 'Green' } else { 'Red' }) }
-if ($CollectHash){ Write-Host "  CollectHash $(if ($hashOk) { '✓ Complete' } else { '✗ Failed' })" -ForegroundColor $(if ($hashOk) { 'Green' } else { 'Red' }) }
+if ($PrepUSB)    { Write-Host "  PrepUSB     $(if ($usbOk)  { 'Complete' } else { 'Failed' })" -ForegroundColor $(if ($usbOk)  { 'Green' } else { 'Red' }) }
+if ($CollectHash){ Write-Host "  CollectHash $(if ($hashOk) { 'Complete' } else { 'Failed' })" -ForegroundColor $(if ($hashOk) { 'Green' } else { 'Red' }) }
 Write-Host ""
 
 if ($PrepUSB -and $usbOk) {
