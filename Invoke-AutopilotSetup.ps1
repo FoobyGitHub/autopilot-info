@@ -3,15 +3,18 @@
 #
 # Run from an elevated PowerShell prompt:
 #
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -CollectHash
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -CollectHash
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/Invoke-AutopilotSetup.ps1))) -CollectHash
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/Invoke-AutopilotSetup.ps1))) -PrepUSB
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -CollectHash
 
 param(
     [switch]$PrepUSB,
     [switch]$CollectHash,
     [string]$DriveLetter,
-    [string]$OutputPath
+    [string]$OutputPath,
+    [string]$TenantId,
+    [string]$ClientId,
+    [string]$ClientSecret
 )
 
 # ── Execution policy ───────────────────────────────────────────────────────────
@@ -37,24 +40,33 @@ Write-Host ""
 if (-not $PrepUSB -and -not $CollectHash) {
     Write-Host "No action specified. Available flags:" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  -CollectHash       Collect Autopilot hardware hash, saves to USB (or desktop if no USB)" -ForegroundColor White
-    Write-Host "  -PrepUSB           Inject ei.cfg into a Windows 11 USB to force Pro edition install" -ForegroundColor White
-    Write-Host "  -DriveLetter X     Force a specific drive letter for -PrepUSB  (e.g. -DriveLetter E)" -ForegroundColor White
-    Write-Host "  -OutputPath path   Override the hash CSV save location" -ForegroundColor White
+    Write-Host "  -CollectHash          Collect hash and upload directly to Intune (browser sign-in — Option A)" -ForegroundColor White
+    Write-Host "  -PrepUSB              Inject ei.cfg + VMD driver into a Windows 11 USB" -ForegroundColor White
+    Write-Host "  -DriveLetter X        Force a specific drive letter for -PrepUSB  (e.g. -DriveLetter E)" -ForegroundColor White
+    Write-Host "  -OutputPath path      Override the hash CSV save location" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Option B — silent app-based Intune upload (no browser prompt):" -ForegroundColor DarkGray
+    Write-Host "  -TenantId <id>        Azure AD tenant ID" -ForegroundColor White
+    Write-Host "  -ClientId <id>        App registration client ID" -ForegroundColor White
+    Write-Host "  -ClientSecret <val>   App registration client secret" -ForegroundColor White
+    Write-Host "  (Run -CollectHash with one or two of these to see full Option B setup instructions)" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "Copy and run one of these commands:" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  Collect hash (insert a separate USB first, auto-detects it):" -ForegroundColor DarkGray
-    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -CollectHash" -ForegroundColor White
+    Write-Host "  Collect hash + upload to Intune (browser sign-in):" -ForegroundColor DarkGray
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/Invoke-AutopilotSetup.ps1))) -CollectHash" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Collect hash + upload silently (app credentials — Option B):" -ForegroundColor DarkGray
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/Invoke-AutopilotSetup.ps1))) -CollectHash -TenantId <id> -ClientId <id> -ClientSecret <secret>" -ForegroundColor White
     Write-Host ""
     Write-Host "  Prep a Windows 11 USB for Pro install (auto-detects CPU, injects VMD driver if needed):" -ForegroundColor DarkGray
-    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB" -ForegroundColor White
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/Invoke-AutopilotSetup.ps1))) -PrepUSB" -ForegroundColor White
     Write-Host ""
     Write-Host "  Prep USB on drive E specifically:" -ForegroundColor DarkGray
-    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -DriveLetter E" -ForegroundColor White
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -DriveLetter E" -ForegroundColor White
     Write-Host ""
     Write-Host "  Do both in one shot:" -ForegroundColor DarkGray
-    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -CollectHash" -ForegroundColor White
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -CollectHash" -ForegroundColor White
     Write-Host ""
     exit 0
 }
@@ -168,7 +180,7 @@ function Invoke-VMDDriverInjection {
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
     $driverInfDir = $null
-    $repoBase     = "https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/drivers/VMD"
+    $repoBase     = "https://raw.githubusercontent.com/FoobyGitHub/autopilot-prep-W11/main/drivers/VMD"
     $driverFiles  = @(
         'iaStorVD.cat',
         'iaStorVD.inf',
@@ -290,11 +302,105 @@ function Invoke-PrepUSB {
     return $true
 }
 
+# ── Intune upload helpers ──────────────────────────────────────────────────────
+
+function Invoke-AutopilotGraphUpload {
+    param(
+        [string]$CsvPath,
+        [string]$TenantId,
+        [string]$ClientId,
+        [string]$ClientSecret
+    )
+
+    Write-Host "[CollectHash] Authenticating with Intune via app credentials (Option B)..." -ForegroundColor Cyan
+
+    $tokenUrl  = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+    $tokenBody = "grant_type=client_credentials" +
+                 "&client_id=$([Uri]::EscapeDataString($ClientId))" +
+                 "&client_secret=$([Uri]::EscapeDataString($ClientSecret))" +
+                 "&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default"
+
+    try {
+        $tokenResponse = Invoke-RestMethod -Uri $tokenUrl -Method Post -Body $tokenBody `
+                             -ContentType 'application/x-www-form-urlencoded' -ErrorAction Stop
+        $token = $tokenResponse.access_token
+        Write-Host "[CollectHash] Authentication successful." -ForegroundColor Green
+    } catch {
+        Write-Host "[CollectHash] ERROR: Failed to obtain access token — $_" -ForegroundColor Red
+        Write-Host "[CollectHash] Verify TenantId, ClientId, ClientSecret and that admin consent has been granted." -ForegroundColor Yellow
+        return $false
+    }
+
+    $graphUrl = "https://graph.microsoft.com/v1.0/deviceManagement/importedWindowsAutopilotDeviceIdentities"
+    $headers  = @{
+        Authorization  = "Bearer $token"
+        'Content-Type' = 'application/json'
+    }
+
+    $devices = Import-Csv -Path $CsvPath
+    $allOk   = $true
+
+    foreach ($device in $devices) {
+        $serial  = $device.'Device Serial Number'
+        $payload = ConvertTo-Json -InputObject @{
+            '@odata.type'      = '#microsoft.graph.importedWindowsAutopilotDeviceIdentity'
+            orderIdentifier    = ''
+            serialNumber       = $serial
+            productKey         = $device.'Windows Product ID'
+            hardwareIdentifier = $device.'Hardware Hash'
+        }
+
+        try {
+            Invoke-RestMethod -Uri $graphUrl -Method Post -Headers $headers -Body $payload -ErrorAction Stop | Out-Null
+            Write-Host "[CollectHash] Uploaded to Intune: $serial" -ForegroundColor Green
+        } catch {
+            Write-Host "[CollectHash] ERROR: Failed to upload $serial — $_" -ForegroundColor Red
+            $allOk = $false
+        }
+    }
+
+    if ($allOk) {
+        Write-Host "[CollectHash] Device registered in Intune — visible under Devices > Enroll devices > Windows enrollment > Devices within 5-15 minutes." -ForegroundColor Green
+    }
+    return $allOk
+}
+
 # ── CollectHash ────────────────────────────────────────────────────────────────
 
 function Invoke-CollectHash {
-    param([string]$OverridePath)
+    param(
+        [string]$OverridePath,
+        [string]$TenantId,
+        [string]$ClientId,
+        [string]$ClientSecret
+    )
 
+    # ── Validate Option B credentials ──────────────────────────────────────────
+    $hasAllB = $TenantId -and $ClientId -and $ClientSecret
+    $hasAnyB = $TenantId -or  $ClientId -or  $ClientSecret
+
+    if ($hasAnyB -and -not $hasAllB) {
+        Write-Host "[CollectHash] ERROR: Option B requires all three: -TenantId, -ClientId, and -ClientSecret." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  ── Option B setup (silent app-based Intune upload) ───────────────" -ForegroundColor Yellow
+        Write-Host "  1. Sign in to https://portal.azure.com" -ForegroundColor White
+        Write-Host "     Go to: Microsoft Entra ID > App registrations > New registration" -ForegroundColor White
+        Write-Host "     Name it (e.g. AutopilotHashUploader), single-tenant, no redirect URI" -ForegroundColor White
+        Write-Host "  2. On the overview page, note the Application (client) ID and Directory (tenant) ID" -ForegroundColor White
+        Write-Host "  3. Go to: API permissions > Add a permission > Microsoft Graph" -ForegroundColor White
+        Write-Host "     Select: Application permissions" -ForegroundColor White
+        Write-Host "     Search for and add: DeviceManagementServiceConfig.ReadWrite.All" -ForegroundColor White
+        Write-Host "     Then click: Grant admin consent for your tenant" -ForegroundColor White
+        Write-Host "  4. Go to: Certificates & secrets > New client secret" -ForegroundColor White
+        Write-Host "     Copy the Value immediately — it is not shown again after leaving the page" -ForegroundColor White
+        Write-Host "  5. Re-run with all three parameters:" -ForegroundColor White
+        Write-Host "     -CollectHash -TenantId <tenant-id> -ClientId <client-id> -ClientSecret <secret>" -ForegroundColor White
+        Write-Host "  ──────────────────────────────────────────────────────────────────" -ForegroundColor Yellow
+        Write-Host ""
+        return $false
+    }
+
+    # ── Determine output path ──────────────────────────────────────────────────
     if ($OverridePath) {
         $outPath = $OverridePath
         Write-Host "[CollectHash] Output path overridden: $outPath" -ForegroundColor Yellow
@@ -324,20 +430,42 @@ function Invoke-CollectHash {
 
     Write-Host "[CollectHash] Collecting hardware hash for $(hostname)..." -ForegroundColor Cyan
 
-    try {
-        Get-WindowsAutopilotInfo -OutputFile $outPath -ErrorAction Stop
-    } catch {
-        Write-Host "[CollectHash] ERROR: Get-WindowsAutopilotInfo failed: $_" -ForegroundColor Red
-        return $false
-    }
+    if ($hasAllB) {
+        # ── Option B: collect CSV, then upload silently via Graph API ──────────
+        try {
+            Get-WindowsAutopilotInfo -OutputFile $outPath -ErrorAction Stop
+        } catch {
+            Write-Host "[CollectHash] ERROR: Get-WindowsAutopilotInfo failed: $_" -ForegroundColor Red
+            return $false
+        }
 
-    if (Test-Path $outPath) {
-        Write-Host "[CollectHash] Done. Hash saved to: $outPath" -ForegroundColor Green
-        Write-Host "[CollectHash] Import into Intune: Devices > Enroll devices > Windows enrollment > Devices > Import" -ForegroundColor DarkGray
-        return $true
+        if (-not (Test-Path $outPath)) {
+            Write-Host "[CollectHash] ERROR: Hash file not found at $outPath after collection." -ForegroundColor Red
+            return $false
+        }
+
+        Write-Host "[CollectHash] Hash saved to: $outPath" -ForegroundColor Green
+        return Invoke-AutopilotGraphUpload -CsvPath $outPath -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret
+
     } else {
-        Write-Host "[CollectHash] ERROR: File not found at $outPath after collection." -ForegroundColor Red
-        return $false
+        # ── Option A: collect and upload via interactive browser sign-in ───────
+        Write-Host "[CollectHash] A browser sign-in window will open — sign in with your M365 admin account." -ForegroundColor Cyan
+
+        try {
+            Get-WindowsAutopilotInfo -OutputFile $outPath -Online -ErrorAction Stop
+        } catch {
+            Write-Host "[CollectHash] ERROR: Get-WindowsAutopilotInfo failed: $_" -ForegroundColor Red
+            return $false
+        }
+
+        if (Test-Path $outPath) {
+            Write-Host "[CollectHash] Hash saved to: $outPath" -ForegroundColor Green
+            Write-Host "[CollectHash] Device registered in Intune — visible under Devices > Enroll devices > Windows enrollment > Devices within 5-15 minutes." -ForegroundColor Green
+            return $true
+        } else {
+            Write-Host "[CollectHash] ERROR: Hash file not found at $outPath after collection." -ForegroundColor Red
+            return $false
+        }
     }
 }
 
@@ -347,7 +475,7 @@ $usbOk  = $true
 $hashOk = $true
 
 if ($PrepUSB)    { $usbOk  = Invoke-PrepUSB -Drive $DriveLetter; Write-Host "" }
-if ($CollectHash){ $hashOk = Invoke-CollectHash -OverridePath $OutputPath;                    Write-Host "" }
+if ($CollectHash){ $hashOk = Invoke-CollectHash -OverridePath $OutputPath -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret; Write-Host "" }
 
 Write-Host "  ─────────────────────────────────" -ForegroundColor DarkGray
 if ($PrepUSB)    { Write-Host "  PrepUSB     $(if ($usbOk)  { 'Complete' } else { 'Failed' })" -ForegroundColor $(if ($usbOk)  { 'Green' } else { 'Red' }) }
