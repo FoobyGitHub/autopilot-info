@@ -63,12 +63,15 @@ if (-not $PrepUSB -and -not $CollectHash) {
 
 function Test-IsWindows11USB {
     param([string]$Root)
-    return (Test-Path "${Root}sources\install.wim") -or (Test-Path "${Root}sources\install.esd")
+    # boot.wim is always present on any Windows install USB (MCT or Rufus).
+    # install.wim / install.esd may be absent on MCT-created ESD-USB drives.
+    return (Test-Path "${Root}sources\boot.wim") -or
+           (Test-Path "${Root}sources\install.wim") -or
+           (Test-Path "${Root}sources\install.esd")
 }
 
 function Find-DataUSB {
     # Returns the first non-system drive that is NOT a Windows 11 install USB.
-    # This prevents hash CSVs from being written to install media.
     $drives = Get-PSDrive -PSProvider FileSystem | Where-Object {
         $_.Root -ne ($env:SystemDrive + "\") -and
         -not (Test-IsWindows11USB -Root $_.Root)
@@ -78,7 +81,7 @@ function Find-DataUSB {
 }
 
 function Find-Windows11USB {
-    # Returns the first drive that contains Windows 11 setup files.
+    # Returns the first drive that looks like a Windows install USB.
     $drives = Get-PSDrive -PSProvider FileSystem | Where-Object {
         $_.Root -ne ($env:SystemDrive + "\") -and
         (Test-IsWindows11USB -Root $_.Root)
@@ -148,8 +151,8 @@ function Invoke-CollectHash {
             Write-Host "[CollectHash] USB detected at ${usbRoot} — saving to: $outPath" -ForegroundColor Green
         } else {
             $outPath = "C:\Users\Public\Desktop\autopilot-$(hostname).csv"
-            Write-Host "[CollectHash] No separate USB detected — saving to Public Desktop: $outPath" -ForegroundColor Yellow
-            Write-Host "[CollectHash] (Windows 11 install USB does not count — insert a separate data USB to save there)" -ForegroundColor DarkGray
+            Write-Host "[CollectHash] No separate data USB detected — saving to Public Desktop: $outPath" -ForegroundColor Yellow
+            Write-Host "[CollectHash] (Insert a separate USB to save the hash there instead)" -ForegroundColor DarkGray
         }
     }
 
