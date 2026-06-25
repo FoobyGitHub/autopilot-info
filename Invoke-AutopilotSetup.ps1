@@ -14,8 +14,6 @@ param(
     [string]$OutputPath
 )
 
-$PS7 = $PSVersionTable.PSVersion.Major -ge 7
-
 # ── Execution policy ───────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  Autopilot Setup Tool" -ForegroundColor Cyan
@@ -166,13 +164,9 @@ function Get-IntelRSTDownloadUrl {
         if (-not $url -and $response -is [System.Collections.IEnumerable]) {
             foreach ($item in $response) {
                 $candidate = $null
-                if ($PS7) {
-                    $candidate = $item.downloadUrl ?? $item.url ?? $item.href
-                } else {
-                    if     ($item.downloadUrl) { $candidate = $item.downloadUrl }
-                    elseif ($item.url)         { $candidate = $item.url }
-                    elseif ($item.href)        { $candidate = $item.href }
-                }
+                if     ($item.downloadUrl) { $candidate = $item.downloadUrl }
+                elseif ($item.url)         { $candidate = $item.url }
+                elseif ($item.href)        { $candidate = $item.href }
                 if ($candidate -match 'downloadmirror\.intel\.com') {
                     $url = $candidate; break
                 }

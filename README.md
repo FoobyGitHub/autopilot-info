@@ -120,12 +120,10 @@ Write the Windows 11 ISO to a USB using the [Microsoft Media Creation Tool](http
 | Requirement | Detail |
 |---|---|
 | Licence | Microsoft 365 Business Premium (includes Windows 11 Pro) |
-| PowerShell | 5.1 or later (inbox on all supported Windows versions). PowerShell 7+ is detected automatically and used where available for improved performance. |
+| PowerShell | 5.1 or later |
 | Elevation | Run as Administrator |
 | Internet | Required for Intel driver download, PSGallery, and Autopilot detection at OOBE |
 | ADK | Not required — `dism.exe` is used from `C:\Windows\System32\` |
-
-> The script auto-detects the PowerShell version at runtime and selects the appropriate execution path. No manual configuration is needed — it works out of the box on any supported Windows machine.
 
 ## Notes
 
