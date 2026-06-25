@@ -15,7 +15,6 @@ param(
 )
 
 # ── Execution policy ───────────────────────────────────────────────────────────
-# Required for Install-Script (PSGallery) to work. Scoped to current user only.
 Write-Host ""
 Write-Host "  Autopilot Setup Tool" -ForegroundColor Cyan
 Write-Host "  Microsoft 365 Business Premium" -ForegroundColor Cyan
@@ -40,25 +39,22 @@ if (-not $PrepUSB -and -not $CollectHash) {
     Write-Host ""
     Write-Host "  -CollectHash       Collect Autopilot hardware hash, saves to USB (or desktop if no USB)" -ForegroundColor White
     Write-Host "  -PrepUSB           Inject ei.cfg into a Windows 11 USB to force Pro edition install" -ForegroundColor White
-    Write-Host "  -DriveLetter <X>   Force a specific drive letter for -PrepUSB  (e.g. -DriveLetter E)" -ForegroundColor White
-    Write-Host "  -OutputPath <path> Override the hash CSV save location" -ForegroundColor White
+    Write-Host "  -DriveLetter X     Force a specific drive letter for -PrepUSB  (e.g. -DriveLetter E)" -ForegroundColor White
+    Write-Host "  -OutputPath path   Override the hash CSV save location" -ForegroundColor White
     Write-Host ""
-    Write-Host "Examples (run from elevated PowerShell):" -ForegroundColor Cyan
+    Write-Host "Copy and run one of these commands:" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Collect hash (insert USB first, auto-detects):" -ForegroundColor DarkGray
-    Write-Host '  & ([scriptblock]::Create((irm <url>))) -CollectHash' -ForegroundColor White
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -CollectHash" -ForegroundColor White
     Write-Host ""
     Write-Host "  Prep a Windows 11 USB for Pro install:" -ForegroundColor DarkGray
-    Write-Host '  & ([scriptblock]::Create((irm <url>))) -PrepUSB' -ForegroundColor White
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB" -ForegroundColor White
     Write-Host ""
-    Write-Host "  Prep USB on drive E: specifically:" -ForegroundColor DarkGray
-    Write-Host '  & ([scriptblock]::Create((irm <url>))) -PrepUSB -DriveLetter E' -ForegroundColor White
+    Write-Host "  Prep USB on drive E specifically:" -ForegroundColor DarkGray
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -DriveLetter E" -ForegroundColor White
     Write-Host ""
     Write-Host "  Do both in one shot:" -ForegroundColor DarkGray
-    Write-Host '  & ([scriptblock]::Create((irm <url>))) -PrepUSB -CollectHash' -ForegroundColor White
-    Write-Host ""
-    Write-Host "  Replace <url> with:" -ForegroundColor DarkGray
-    Write-Host "  https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1" -ForegroundColor DarkGray
+    Write-Host "  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/FoobyGitHub/autopilot-info/main/Invoke-AutopilotSetup.ps1))) -PrepUSB -CollectHash" -ForegroundColor White
     Write-Host ""
     exit 0
 }
