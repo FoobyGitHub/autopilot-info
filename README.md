@@ -219,3 +219,53 @@ On most machines that resolves to `C:\Users\<username>\AppData\Local\Temp\`. The
 - The script sets execution policy to `RemoteSigned` for the current user automatically — no need to sort this manually beforehand.
 - The hardware hash CSV contains serial number, Windows product ID, and hardware hash only — no personal data.
 - If a device was previously registered in Autopilot under a different tenant, deregister it there first before importing the hash.
+
+---
+
+## WinPE Hash Collection (bare-metal devices)
+
+This is for registering a device with Autopilot when there is no operating system installed and no spare laptop available to run `-CollectHash`. It boots the target device from a USB into WinPE, collects the hardware hash using oa3tool.exe, and uploads it directly to Intune via Microsoft Graph API — all before Windows is installed.
+
+The USB also carries the PrepUSB content on a separate partition, so the technician can proceed with the full Windows build straight afterwards without swapping media.
+
+This approach is not officially supported by Microsoft but is widely used in the community. The hash produced is the same 4K hardware hash that `Get-WindowsAutopilotInfo` generates — it just comes from WinPE instead of a running OS.
+
+### Prerequisites
+
+- **Windows ADK** installed on the admin machine — provides `oa3tool.exe` (found at `C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Licensing\OA30\oa3tool.exe`)
+- **PCPKsp.dll** copied from a Windows 11 machine (`C:\Windows\System32\PCPKsp.dll`) — required for TPM data in the hash. Without it, the hash is still collected but may be incomplete.
+- **OSDCloud** PowerShell module — used by `Build-WinPEUSB.ps1` to create the bootable USB
+- **Entra app registration** with `DeviceManagementServiceConfig.ReadWrite.All` — created automatically by `New-AutopilotAppRegistration.ps1`
+
+### Setup
+
+1. **Run `New-AutopilotAppRegistration.ps1`** from an elevated PowerShell prompt. This creates the app registration in Entra, grants admin consent, creates a client secret, and writes credentials to `autopilot-appreg.config`. Requires Global Administrator or Application Administrator + Intune Administrator.
+
+2. **Run `Build-WinPEUSB.ps1`** (coming soon) to build the bootable USB. This reads the config file, injects credentials into the WinPE scripts, and creates a dual-partition USB using OSDCloud.
+
+3. **Boot the target device from the USB.** The hash collection and upload runs automatically.
+
+### Security
+
+- The public repo contains no credentials. Credentials are injected into the WinPE image at USB build time by `Build-WinPEUSB.ps1` and never appear in source control.
+- `autopilot-appreg.config` is automatically added to `.gitignore`.
+- The app registration has only `DeviceManagementServiceConfig.ReadWrite.All` — the minimum permission needed. It cannot read users, email, or anything else.
+- Registering a device in Autopilot does not give it access to tenant resources. The device must still pass OOBE, Entra join, and Conditional Access.
+- The client secret expires after 90 days. Re-run `New-AutopilotAppRegistration.ps1` and rebuild the USB to rotate.
+- If the USB is lost, the only exposure is that someone could register device serial numbers in Autopilot. Revoke the client secret immediately via Entra > App registrations > AutopilotPrep-HashUpload > Certificates & secrets.
+
+### File reference
+
+| File | Description |
+|---|---|
+| `New-AutopilotAppRegistration.ps1` | Creates/validates the Entra app registration and outputs credentials |
+| `WinPE/Invoke-AutopilotHash.ps1` | Runs in WinPE to collect and upload the hardware hash |
+| `WinPE/oa3.cfg` | Configuration file for oa3tool.exe |
+| `WinPE/README.md` | WinPE folder documentation |
+| `Build-WinPEUSB.ps1` | (coming soon) Builds the bootable USB with injected credentials |
+
+### Credits
+
+- OA3Tool WinPE hash collection technique: [Mike Meierm](https://mikemdm.de/2023/01/29/can-you-create-a-autopilot-hash-from-winpe-yes/)
+- WinPEAP project for demonstrating Graph API upload from WinPE: [blawalt](https://github.com/blawalt/WinPEAP)
+- OSDCloud: [David Segura and the OSD community](https://www.osdcloud.com)
